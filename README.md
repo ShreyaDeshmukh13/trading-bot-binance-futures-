@@ -1,5 +1,9 @@
 # Trading Bot — Binance Futures Testnet (USDT-M)
 
+![Python](https://img.shields.io/badge/Python-3.9+-blue)
+![Tests](https://img.shields.io/badge/Tests-29-green)
+![CI](https://img.shields.io/badge/CI-GitHub_Actions-success)
+
 A structured Python CLI application for placing MARKET, LIMIT, and STOP-LIMIT
 orders on Binance USDT-M Futures. The project focuses on clean architecture,
 input validation, robust logging, retry mechanisms, testing, and maintainability.
