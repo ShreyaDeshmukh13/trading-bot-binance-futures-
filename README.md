@@ -1,198 +1,422 @@
 # Trading Bot — Binance Futures Testnet (USDT-M)
 
-A structured CLI application that places MARKET, LIMIT, and STOP-LIMIT
-orders on Binance USDT-M Futures Testnet, with input validation, retrying
-and rotating logging, a guided interactive mode, and a unit-tested
-client/CLI split.
+A structured Python CLI application for placing MARKET, LIMIT, and STOP-LIMIT
+orders on Binance USDT-M Futures. The project focuses on clean architecture,
+input validation, robust logging, retry mechanisms, testing, and maintainability.
+
+---
+
+## Key Features
+
+- MARKET, LIMIT, and STOP-LIMIT order support
+- BUY and SELL order execution
+- Interactive CLI mode
+- Dry-run mode for local testing
+- Structured rotating logs
+- Retry mechanism with exponential backoff
+- Unit-tested architecture (29 tests)
+- GitHub Actions CI pipeline
+- Separation of concerns through layered design
+- Typed exceptions and graceful error handling
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    A[User Input] --> B[CLI Layer]
+    B --> C[Validators]
+    C --> D[Order Manager]
+    D --> E[Binance Futures Client]
+    E --> F[Binance Futures API]
+```
+
+The architecture intentionally separates:
+
+- **CLI Layer** → User interaction
+- **Validation Layer** → Input checks and business rules
+- **Service Layer** → Order orchestration
+- **Client Layer** → API communication
+
+This makes each component independently reusable and testable.
+
+---
 
 ## Contents
 
-- [Project structure](#project-structure)
+- [Project Structure](#project-structure)
 - [Setup](#setup)
-- [Running examples](#running-examples)
+- [Running Examples](#running-examples)
 - [Testing](#testing)
-- [Error handling](#error-handling)
-- [Design notes](#design-notes)
-- [Assumptions](#assumptions)
-- [If I kept extending this](#if-i-kept-extending-this)
+- [Error Handling](#error-handling)
+- [Design Notes](#design-notes)
+- [Assumptions & Limitations](#assumptions--limitations)
+- [Future Improvements](#future-improvements)
 
-## Project structure
+---
 
-```
+## Project Structure
+
+```text
 trading_bot/
-  bot/
-    __init__.py
-    client.py           # Signed REST client for Binance Futures Testnet
-    orders.py            # Order placement + request/response summaries
-    validators.py         # Input validation, cross-field rules
-    logging_config.py     # Rotating file handler + console handler
-  cli.py                  # CLI entry point (argparse) — flag mode + interactive mode
-  tests/
-    test_validators.py    # Validation rules, in isolation
-    test_client.py         # Retry/backoff, dry-run, 4xx-vs-5xx handling (mocked HTTP)
-    test_orders.py          # OrderManager against a fake client (no network)
-  logs/
-    trading_bot.log         # Sample log: one MARKET, one LIMIT, one STOP order
-  .github/workflows/tests.yml  # CI: runs pytest + dry-run smoke tests on push/PR
-  requirements.txt
-  requirements-dev.txt
-  pyproject.toml
-  .env.example
-  README.md
+│
+├── bot/
+│   ├── __init__.py
+│   ├── client.py
+│   ├── orders.py
+│   ├── validators.py
+│   └── logging_config.py
+│
+├── tests/
+│   ├── test_client.py
+│   ├── test_orders.py
+│   └── test_validators.py
+│
+├── logs/
+│   └── sample_trading_bot.log
+│
+├── .github/
+│   └── workflows/
+│       └── tests.yml
+│
+├── cli.py
+├── requirements.txt
+├── requirements-dev.txt
+├── pyproject.toml
+├── .env.example
+├── README.md
+└── .gitignore
 ```
 
-`client.py` knows nothing about argparse or `print()` — it only talks to
-the exchange and raises typed exceptions (`BinanceAPIError`,
-`BinanceNetworkError`). `cli.py` decides how to present results. This keeps
-the client reusable (e.g. from a scheduled script or a future web UI) and
-independently testable, which is why `tests/test_client.py` can fully
-exercise retry/backoff behavior without ever hitting the network.
+### Component Responsibilities
+
+| Component | Responsibility |
+|-----------|---------------|
+| `cli.py` | CLI interface and user interaction |
+| `client.py` | Binance API communication and request signing |
+| `validators.py` | Input validation and business rules |
+| `orders.py` | Order orchestration and response formatting |
+| `logging_config.py` | Structured rotating logging |
+| `tests/` | Unit and integration-style tests |
+
+---
 
 ## Setup
 
-1. **Create a Binance Futures Testnet account** at
-   https://testnet.binancefuture.com and log in (GitHub login works).
-2. **Generate API credentials** from the testnet dashboard (API Key +
-   Secret). These are testnet-only keys — no real funds involved.
-3. **Install Python 3.9+** and dependencies:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate      # Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-4. **Provide credentials** via environment variables or CLI flags:
-   ```bash
-   cp .env.example .env
-   # edit .env with your real testnet key/secret, then:
-   export $(grep -v '^#' .env | xargs)     # Linux/macOS
-   ```
-   or pass them directly with `--api-key` / `--api-secret` on each run.
+### 1. Clone Repository
 
-## Running examples
-
-**Market order:**
 ```bash
-python cli.py --symbol BTCUSDT --side BUY --type MARKET --quantity 0.01
+git clone <repo-url>
+cd trading_bot
 ```
 
-**Limit order:**
+### 2. Create Virtual Environment
+
 ```bash
-python cli.py --symbol BTCUSDT --side SELL --type LIMIT --quantity 0.01 --price 60000
+python -m venv venv
 ```
 
-**Stop-limit order (bonus: third order type):**
+Linux/macOS:
+
 ```bash
-python cli.py --symbol ETHUSDT --side SELL --type STOP --quantity 0.5 \
-    --price 3000 --stop-price 3050
+source venv/bin/activate
 ```
 
-**Interactive mode (bonus: enhanced CLI UX)** — prompts for each field,
-re-asks on invalid input instead of exiting:
+Windows:
+
+```bash
+venv\Scripts\activate
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure Credentials (Optional)
+
+Generate Binance Futures Testnet credentials if available in your region.
+
+Create:
+
+```bash
+cp .env.example .env
+```
+
+Add:
+
+```env
+BINANCE_API_KEY=your_key
+BINANCE_API_SECRET=your_secret
+```
+
+The application also supports full execution using `--dry-run` without requiring credentials.
+
+---
+
+## Running Examples
+
+### Market Order
+
+```bash
+python cli.py \
+    --symbol BTCUSDT \
+    --side BUY \
+    --type MARKET \
+    --quantity 0.01
+```
+
+---
+
+### Limit Order
+
+```bash
+python cli.py \
+    --symbol BTCUSDT \
+    --side SELL \
+    --type LIMIT \
+    --quantity 0.01 \
+    --price 60000
+```
+
+---
+
+### Stop-Limit Order
+
+```bash
+python cli.py \
+    --symbol ETHUSDT \
+    --side SELL \
+    --type STOP \
+    --quantity 0.5 \
+    --price 3000 \
+    --stop-price 3050
+```
+
+---
+
+### Interactive Mode
+
 ```bash
 python cli.py --interactive
-python cli.py                    # running with no args also drops into this mode
 ```
 
-**Dry run** — no credentials or network needed, simulates a realistic
-response locally and still writes to the log file. Works with any of the
-modes above by adding `--dry-run`:
+or simply:
+
 ```bash
-python cli.py --symbol BTCUSDT --side BUY --type MARKET --quantity 0.01 --dry-run
+python cli.py
 ```
 
-Add `-y` / `--yes` to skip the confirmation prompt (useful for scripting/CI).
+---
 
-Every run prints:
-1. an order request summary (symbol, side, type, quantity, price if applicable)
-2. an order response summary (orderId, status, executedQty, avgPrice if available)
-3. a clear `SUCCESS:` or `FAILED:` line
+### Dry Run Mode
 
-All requests, responses, and errors are also logged to `logs/trading_bot.log`
-(rotates at 2MB, keeps 5 backups — file gets full DEBUG detail, console
-shows INFO and above so normal runs aren't noisy).
+```bash
+python cli.py \
+    --symbol BTCUSDT \
+    --side BUY \
+    --type MARKET \
+    --quantity 0.01 \
+    --dry-run
+```
+
+Dry-run mode simulates realistic responses locally without requiring network access.
+
+---
 
 ## Testing
 
+Install development dependencies:
+
 ```bash
 pip install -r requirements-dev.txt
+```
+
+Run tests:
+
+```bash
 pytest -v
 ```
 
-29 tests cover:
-- every validation rule and cross-field constraint (`test_validators.py`)
-- retry-with-backoff on connection errors and 5xx responses, *no* retry on
-  4xx rejections, dry-run behavior, malformed-response handling
-  (`test_client.py`, HTTP fully mocked — no network needed)
-- `OrderManager`'s handling of success, `BinanceAPIError`,
-  `BinanceNetworkError`, and unexpected exceptions (`test_orders.py`)
+### Test Coverage
 
-CI (`.github/workflows/tests.yml`) runs this matrix across Python 3.9/3.11/3.12
-on every push and PR, plus two dry-run smoke tests through the actual CLI
-entry point.
+The project currently includes **29 tests**, covering:
 
-## Error handling
+- Validation rules
+- Retry and backoff mechanisms
+- Dry-run functionality
+- Network failure handling
+- API error handling
+- OrderManager behavior
+- Mocked client interactions
 
-Three distinct failure classes, each reported clearly instead of a raw
-traceback reaching the user:
+GitHub Actions automatically executes the test suite on every push and pull request.
 
-- **Invalid input** — caught in `validators.py` before any network call
-  (missing price on a LIMIT order, non-numeric quantity, unsupported
-  symbol/side/type, etc.). Exits with `Invalid input: ...`.
-- **API errors** — Binance responds but rejects the order (bad symbol,
-  insufficient testnet balance, filter violations). Surfaced as
-  `BinanceAPIError` with the exchange's own message and HTTP status.
-  These are **never retried** — a rejected order won't succeed by resending
-  it, and retrying could risk an unintended duplicate if the rejection
-  reason were transient on Binance's side.
-- **Network failures** — timeouts, connection errors, 5xx responses, or
-  malformed responses. These **are retried** (up to 3 attempts, exponential
-  backoff: 0.5s → 1s → 2s) since they're plausibly transient, then surfaced
-  as `BinanceNetworkError` without crashing the CLI.
+---
 
-## Design notes
+## Error Handling
 
-- Implemented with `requests` + manual HMAC-SHA256 signing rather than the
-  `python-binance` SDK, so every request/response is fully visible for
-  logging/review and the client stays a small, auditable surface.
-- No secrets are ever written to the log file — only order parameters and
-  exchange responses.
-- Retry policy distinguishes 4xx (our mistake, don't retry) from 5xx/network
-  (their/transient problem, retry) rather than retrying everything blindly.
-- `OrderManager` and `BinanceFuturesClient` are decoupled via a plain method
-  signature (`place_order(...)`), so `tests/test_orders.py` swaps in a
-  `FakeClient` with zero mocking framework needed.
+The application distinguishes between three failure categories.
 
-## Assumptions
+### 1. Validation Errors
 
-- Scope is limited to USDT-margined pairs (symbols must end in `USDT`),
-  per the task's "USDT-M" requirement.
-- `STOP` was chosen as the bonus third order type (stop-limit: requires
-  both `--price` and `--stop-price`), since it's directly supported by the
-  same Futures order endpoint used for MARKET/LIMIT. Interactive mode was
-  added as a second bonus item since the task listed it as an independent
-  option.
-- Order quantities/prices are passed straight through as given; the bot
-  does not fetch and enforce Binance's per-symbol `LOT_SIZE`/`PRICE_FILTER`
-  exchange rules. In practice, use reasonable testnet values (e.g. small
-  BTCUSDT quantities like 0.01) — the exchange itself rejects values outside
-  its filters, surfaced as a `BinanceAPIError`.
-- Default `timeInForce` for LIMIT/STOP orders is `GTC`, overridable with
-  `--time-in-force`.
-- **`logs/trading_bot.log` in this repo was generated using `--dry-run`
-  mode** (no live credentials were available in the environment this was
-  built in). Dry-run produces the same log structure as a real order, minus
-  the actual HTTP round trip. Before submitting, re-run the MARKET and
-  LIMIT examples above with your own testnet credentials (drop `--dry-run`)
-  so the submitted log reflects real testnet responses — the task asks for
-  genuine order logs, and passing off simulated ones as real would misrepresent
-  what was tested.
+Examples:
 
-## If I kept extending this
+- Missing price on LIMIT order
+- Invalid quantity
+- Unsupported symbol
+- Invalid side or order type
 
-Left out to keep the task inside its 60-minute scope, but the natural next
-steps: fetch `/fapi/v1/exchangeInfo` once at startup to validate
-quantity/price against each symbol's real `LOT_SIZE`/`PRICE_FILTER` instead
-of just checking `> 0`; add an `order_history.json`/SQLite record of
-submitted orders for reconciliation; add OCO order support; and swap the
-`--dry-run` mock responses for a recorded-fixture replay so integration
-tests can assert against real historical Binance response shapes.
+These are detected before any network call.
+
+---
+
+### 2. API Errors
+
+Examples:
+
+- Exchange rejects order
+- Invalid symbol
+- Insufficient balance
+- Filter violations
+
+These raise:
+
+```python
+BinanceAPIError
+```
+
+API rejections are intentionally **not retried**.
+
+---
+
+### 3. Network Errors
+
+Examples:
+
+- Connection failures
+- Timeouts
+- HTTP 5xx responses
+- Malformed responses
+
+These raise:
+
+```python
+BinanceNetworkError
+```
+
+Network failures are retried using exponential backoff:
+
+```text
+0.5s → 1s → 2s
+```
+
+---
+
+## Design Notes
+
+### Why manual REST implementation?
+
+The project uses:
+
+```python
+requests + HMAC-SHA256
+```
+
+instead of `python-binance` to:
+
+- Maintain a smaller dependency surface
+- Improve transparency
+- Provide complete request/response logging
+- Demonstrate understanding of API authentication
+
+---
+
+### Why layered architecture?
+
+Separating responsibilities improves:
+
+- Testability
+- Reusability
+- Maintainability
+- Future extensibility
+
+---
+
+### Why retry only network failures?
+
+Retrying rejected orders may accidentally duplicate orders.
+
+Therefore:
+
+| Error Type | Retry |
+|------------|--------|
+| Validation Errors | ❌ |
+| API 4xx Errors | ❌ |
+| Network/5xx Errors | ✅ |
+
+---
+
+## Assumptions & Limitations
+
+- Limited to USDT-margined futures pairs.
+- STOP order type chosen as bonus functionality.
+- Binance exchange filters (`LOT_SIZE`, `PRICE_FILTER`) are enforced by the exchange rather than prevalidated locally.
+- LIMIT and STOP orders use `GTC` by default.
+
+### Testnet Access Limitation
+
+Due to regional restrictions and identity verification requirements,
+live Binance Futures Testnet API execution could not be completed during development.
+
+Therefore, validation was performed using:
+
+- Dry-run execution mode
+- Mocked API responses
+- Unit tests
+- Simulated API failures
+- Simulated network failures
+
+`logs/sample_trading_bot.log` contains representative dry-run logs demonstrating the application's behavior.
+
+The client implementation follows Binance Futures API specifications and can be executed directly once valid credentials are available.
+
+---
+
+## Future Improvements
+
+Potential enhancements beyond the scope of this assignment:
+
+- Fetch `/fapi/v1/exchangeInfo`
+  for real-time symbol validation.
+- OCO order support.
+- Order history persistence (SQLite).
+- Dockerized deployment.
+- WebSocket support for real-time updates.
+- Portfolio analytics dashboard.
+- Recorded API fixtures for integration testing.
+- Lightweight web interface.
+
+---
+
+## CI Pipeline
+
+GitHub Actions automatically:
+
+1. Installs dependencies
+2. Runs the complete test suite
+3. Executes CLI smoke tests
+4. Validates project integrity
+
+---
+
+## Author
+
+Developed as part of the Primetrade.ai Python Developer Internship assignment, with emphasis on:
+
+- Software engineering practices
+- Clean architecture
+- Testing and maintainability
+- Production-oriented error handling
